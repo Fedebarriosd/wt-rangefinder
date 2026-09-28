@@ -1,0 +1,14 @@
+build/
+
+# Downloaded War Thunder minimap assets (Gaijin's assets, not ours to
+# redistribute) - run scripts/fetch_maps.ps1 to pull your own copy.
+# The bundled test grid is our own placeholder image, so it's kept.
+data/maps/*.png
+!data/maps/test_grid.png
+
+# Per-machine window state (size/position/theme), not project config.
+window.cfg
+
+# Qt Creator's per-machine project state (local paths, imported kit info).
+*.user
+.qtcreator/

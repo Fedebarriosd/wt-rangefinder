@@ -53,7 +53,13 @@ FetchContent_Declare(stb
 FetchContent_MakeAvailable(stb)
 
 # --- The app ---
-add_executable(wt-rangefinder src/main.cpp)
+set(APP_SOURCES src/main.cpp)
+if(WIN32)
+    # Embeds the icon shown for the .exe in Explorer / shortcuts
+    enable_language(RC)
+    list(APPEND APP_SOURCES assets/app.rc)
+endif()
+add_executable(wt-rangefinder ${APP_SOURCES})
 target_include_directories(wt-rangefinder PRIVATE ${stb_SOURCE_DIR})
 target_link_libraries(wt-rangefinder PRIVATE imgui_lib ${SDL_LIB})
 

@@ -17,6 +17,8 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+#include "icon_png.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -199,40 +201,126 @@ static void DrawPin(ImDrawList* dl, ImVec2 p, ImU32 color, const char* label)
     dl->AddText(tp, color, label);
 }
 
+static const char* kAuthorName = "Fede Barrios";
+static const char* kAuthorUrl = "https://www.fedebarriosd.com";
+static const char* kLicenseUrl = "https://github.com/Fedebarriosd/wt-rangefinder/blob/main/LICENSE";
+static const char* kSourceUrl = "https://github.com/Fedebarriosd/wt-rangefinder";
+
+// Text that opens a URL in the default browser when clicked.
+static void LinkText(const char* label, const char* url)
+{
+    ImVec4 col = ImGui::GetStyleColorVec4(ImGuiCol_PlotLines);
+    ImGui::TextColored(col, "%s", label);
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+        ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+        ImGui::GetWindowDrawList()->AddLine(ImVec2(a.x, b.y), b, ImGui::GetColorU32(col));
+        ImGui::SetTooltip("%s", url);
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            SDL_OpenURL(url);
+    }
+}
+
 // --- UI themes ---
-enum class ThemeId { Dark = 0, Light, Amber, Green, Gruvbox, Count };
-static const char* kThemeNames[(int)ThemeId::Count] = {"Dark", "Light", "Amarillo", "Verde", "Gruvbox"};
+enum class ThemeId {
+    Dark = 0,
+    Light,
+    Amber,
+    Green,
+    Gruvbox,
+    Blue,
+    Purple,
+    Red,
+    Teal,
+    Pink,
+    Nord,
+    CatppuccinLatte,
+    CatppuccinFrappe,
+    CatppuccinMacchiato,
+    CatppuccinMocha,
+    Count
+};
+struct ThemeGroup {
+    const char* title;
+    std::vector<ThemeId> themes;  // alphabetical by display name
+};
+static const std::vector<ThemeGroup> kThemeGroups = {
+    {"Default", {ThemeId::Dark, ThemeId::Light}},
+    {"Colors",
+     {ThemeId::Amber, ThemeId::Blue, ThemeId::Green, ThemeId::Pink, ThemeId::Purple, ThemeId::Red, ThemeId::Teal}},
+    {"Palettes",
+     {ThemeId::CatppuccinFrappe, ThemeId::CatppuccinLatte, ThemeId::CatppuccinMacchiato, ThemeId::CatppuccinMocha,
+      ThemeId::Gruvbox, ThemeId::Nord}},
+};
+static const char* kThemeNames[(int)ThemeId::Count] = {
+    "Dark",   "Light",  "Amber",   "Green",   "Gruvbox", "Blue",      "Purple",
+    "Red",    "Teal",   "Pink",    "Nord",    "Catppuccin Latte",     "Catppuccin Frappe",
+    "Catppuccin Macchiato", "Catppuccin Mocha"};
 
 static ImVec4 ColorFromHex(unsigned int hex, float alpha = 1.0f)
 {
     return ImVec4(((hex >> 16) & 0xFF) / 255.0f, ((hex >> 8) & 0xFF) / 255.0f, (hex & 0xFF) / 255.0f, alpha);
 }
 
-// Dark base with the given hue applied to the interactive/accent widgets
-// (buttons, sliders, headers, tabs, ...) - used for the Amber/Green presets.
-static void ApplyAccentTheme(ImVec4 accent, ImVec4 accentHover, ImVec4 accentActive)
+// A full dark palette built from shades of a single hue (not just one
+// accent color dropped on the default dark theme) - background, borders and
+// widget states all move through the same hue, from near-black up to the
+// brightest highlight. Used for the Amber/Green presets.
+struct HuePalette {
+    unsigned int bg0, bg1, bg2, bg3;     // background -> raised surfaces
+    unsigned int border;
+    unsigned int text, textDisabled;
+    unsigned int dim, mid, bright, hot;  // low -> high saturation/brightness
+};
+
+static void ApplyHuePalette(const HuePalette& p)
 {
     ImGui::StyleColorsDark();
     ImVec4* c = ImGui::GetStyle().Colors;
-    c[ImGuiCol_CheckMark] = accent;
-    c[ImGuiCol_SliderGrab] = accent;
-    c[ImGuiCol_SliderGrabActive] = accentActive;
-    c[ImGuiCol_Button] = ImVec4(accent.x, accent.y, accent.z, 0.55f);
-    c[ImGuiCol_ButtonHovered] = accentHover;
-    c[ImGuiCol_ButtonActive] = accentActive;
-    c[ImGuiCol_Header] = ImVec4(accent.x, accent.y, accent.z, 0.5f);
-    c[ImGuiCol_HeaderHovered] = accentHover;
-    c[ImGuiCol_HeaderActive] = accentActive;
-    c[ImGuiCol_Tab] = ImVec4(accent.x, accent.y, accent.z, 0.4f);
-    c[ImGuiCol_TabHovered] = accentHover;
-    c[ImGuiCol_TabActive] = ImVec4(accent.x, accent.y, accent.z, 0.7f);
-    c[ImGuiCol_TitleBgActive] = ImVec4(accent.x, accent.y, accent.z, 0.5f);
-    c[ImGuiCol_ResizeGrip] = ImVec4(accent.x, accent.y, accent.z, 0.3f);
-    c[ImGuiCol_ResizeGripHovered] = accentHover;
-    c[ImGuiCol_ResizeGripActive] = accentActive;
-    c[ImGuiCol_FrameBgActive] = ImVec4(accent.x, accent.y, accent.z, 0.35f);
-    c[ImGuiCol_SeparatorHovered] = accentHover;
-    c[ImGuiCol_SeparatorActive] = accentActive;
+    auto h = [](unsigned int hex) { return ColorFromHex(hex); };
+    c[ImGuiCol_Text] = h(p.text);
+    c[ImGuiCol_TextDisabled] = h(p.textDisabled);
+    c[ImGuiCol_WindowBg] = h(p.bg0);
+    c[ImGuiCol_ChildBg] = h(p.bg0);
+    c[ImGuiCol_PopupBg] = h(p.bg1);
+    c[ImGuiCol_Border] = h(p.border);
+    c[ImGuiCol_BorderShadow] = ImVec4(0, 0, 0, 0);
+    c[ImGuiCol_FrameBg] = h(p.bg1);
+    c[ImGuiCol_FrameBgHovered] = h(p.bg2);
+    c[ImGuiCol_FrameBgActive] = h(p.bg3);
+    c[ImGuiCol_TitleBg] = h(p.bg0);
+    c[ImGuiCol_TitleBgActive] = h(p.bg1);
+    c[ImGuiCol_TitleBgCollapsed] = h(p.bg0);
+    c[ImGuiCol_MenuBarBg] = h(p.bg1);
+    c[ImGuiCol_ScrollbarBg] = h(p.bg0);
+    c[ImGuiCol_ScrollbarGrab] = h(p.bg3);
+    c[ImGuiCol_ScrollbarGrabHovered] = h(p.border);
+    c[ImGuiCol_ScrollbarGrabActive] = h(p.dim);
+    c[ImGuiCol_CheckMark] = h(p.bright);
+    c[ImGuiCol_SliderGrab] = h(p.mid);
+    c[ImGuiCol_SliderGrabActive] = h(p.bright);
+    c[ImGuiCol_Button] = h(p.bg3);
+    c[ImGuiCol_ButtonHovered] = h(p.dim);
+    c[ImGuiCol_ButtonActive] = h(p.mid);
+    c[ImGuiCol_Header] = h(p.bg3);
+    c[ImGuiCol_HeaderHovered] = h(p.dim);
+    c[ImGuiCol_HeaderActive] = h(p.mid);
+    c[ImGuiCol_Separator] = h(p.border);
+    c[ImGuiCol_SeparatorHovered] = h(p.mid);
+    c[ImGuiCol_SeparatorActive] = h(p.bright);
+    c[ImGuiCol_ResizeGrip] = h(p.bg3);
+    c[ImGuiCol_ResizeGripHovered] = h(p.dim);
+    c[ImGuiCol_ResizeGripActive] = h(p.mid);
+    c[ImGuiCol_Tab] = h(p.bg1);
+    c[ImGuiCol_TabHovered] = h(p.dim);
+    c[ImGuiCol_TabActive] = h(p.bg3);
+    c[ImGuiCol_TabUnfocused] = h(p.bg0);
+    c[ImGuiCol_TabUnfocusedActive] = h(p.bg1);
+    c[ImGuiCol_PlotLines] = h(p.bright);
+    c[ImGuiCol_PlotLinesHovered] = h(p.hot);
+    c[ImGuiCol_PlotHistogram] = h(p.mid);
+    c[ImGuiCol_PlotHistogramHovered] = h(p.bright);
+    c[ImGuiCol_TextSelectedBg] = ColorFromHex(p.mid, 0.35f);
 }
 
 static void ApplyGruvboxTheme()
@@ -284,6 +372,118 @@ static void ApplyGruvboxTheme()
     c[ImGuiCol_TextSelectedBg] = ColorFromHex(0xd79921, 0.35f);
 }
 
+// Classic Nord (arctic, north-bluish) palette: https://www.nordtheme.com
+static void ApplyNordTheme()
+{
+    ImGui::StyleColorsDark();
+    ImVec4* c = ImGui::GetStyle().Colors;
+    const unsigned int nord0 = 0x2e3440, nord1 = 0x3b4252, nord2 = 0x434c5e, nord3 = 0x4c566a;
+    const unsigned int nord6 = 0xeceff4;
+    const unsigned int nord7 = 0x8fbcbb, nord8 = 0x88c0d0, nord9 = 0x81a1c1;
+    const unsigned int nord12 = 0xd08770, nord13 = 0xebcb8b;
+    c[ImGuiCol_Text] = ColorFromHex(nord6);
+    c[ImGuiCol_TextDisabled] = ColorFromHex(nord3);
+    c[ImGuiCol_WindowBg] = ColorFromHex(nord0);
+    c[ImGuiCol_ChildBg] = ColorFromHex(nord0);
+    c[ImGuiCol_PopupBg] = ColorFromHex(nord1);
+    c[ImGuiCol_Border] = ColorFromHex(nord2);
+    c[ImGuiCol_BorderShadow] = ImVec4(0, 0, 0, 0);
+    c[ImGuiCol_FrameBg] = ColorFromHex(nord1);
+    c[ImGuiCol_FrameBgHovered] = ColorFromHex(nord2);
+    c[ImGuiCol_FrameBgActive] = ColorFromHex(nord3);
+    c[ImGuiCol_TitleBg] = ColorFromHex(nord0);
+    c[ImGuiCol_TitleBgActive] = ColorFromHex(nord1);
+    c[ImGuiCol_TitleBgCollapsed] = ColorFromHex(nord0);
+    c[ImGuiCol_MenuBarBg] = ColorFromHex(nord1);
+    c[ImGuiCol_ScrollbarBg] = ColorFromHex(nord0);
+    c[ImGuiCol_ScrollbarGrab] = ColorFromHex(nord2);
+    c[ImGuiCol_ScrollbarGrabHovered] = ColorFromHex(nord3);
+    c[ImGuiCol_ScrollbarGrabActive] = ColorFromHex(nord9);
+    c[ImGuiCol_CheckMark] = ColorFromHex(nord8);
+    c[ImGuiCol_SliderGrab] = ColorFromHex(nord9);
+    c[ImGuiCol_SliderGrabActive] = ColorFromHex(nord8);
+    c[ImGuiCol_Button] = ColorFromHex(nord2);
+    c[ImGuiCol_ButtonHovered] = ColorFromHex(nord3);
+    c[ImGuiCol_ButtonActive] = ColorFromHex(nord9);
+    c[ImGuiCol_Header] = ColorFromHex(nord2);
+    c[ImGuiCol_HeaderHovered] = ColorFromHex(nord3);
+    c[ImGuiCol_HeaderActive] = ColorFromHex(nord9);
+    c[ImGuiCol_Separator] = ColorFromHex(nord2);
+    c[ImGuiCol_SeparatorHovered] = ColorFromHex(nord9);
+    c[ImGuiCol_SeparatorActive] = ColorFromHex(nord8);
+    c[ImGuiCol_ResizeGrip] = ColorFromHex(nord2);
+    c[ImGuiCol_ResizeGripHovered] = ColorFromHex(nord9);
+    c[ImGuiCol_ResizeGripActive] = ColorFromHex(nord8);
+    c[ImGuiCol_Tab] = ColorFromHex(nord1);
+    c[ImGuiCol_TabHovered] = ColorFromHex(nord3);
+    c[ImGuiCol_TabActive] = ColorFromHex(nord2);
+    c[ImGuiCol_TabUnfocused] = ColorFromHex(nord0);
+    c[ImGuiCol_TabUnfocusedActive] = ColorFromHex(nord1);
+    c[ImGuiCol_PlotLines] = ColorFromHex(nord8);
+    c[ImGuiCol_PlotLinesHovered] = ColorFromHex(nord7);
+    c[ImGuiCol_PlotHistogram] = ColorFromHex(nord12);
+    c[ImGuiCol_PlotHistogramHovered] = ColorFromHex(nord13);
+    c[ImGuiCol_TextSelectedBg] = ColorFromHex(nord9, 0.35f);
+}
+
+// The four official Catppuccin flavors: https://catppuccin.com
+struct CatppuccinPalette {
+    unsigned int base, mantle, crust;
+    unsigned int surface0, surface1, surface2;
+    unsigned int overlay0, overlay1;
+    unsigned int text;
+    unsigned int blue, mauve, green, peach, yellow, teal;
+};
+
+static void ApplyCatppuccinPalette(const CatppuccinPalette& p)
+{
+    ImGui::StyleColorsDark();
+    ImVec4* c = ImGui::GetStyle().Colors;
+    c[ImGuiCol_Text] = ColorFromHex(p.text);
+    c[ImGuiCol_TextDisabled] = ColorFromHex(p.overlay0);
+    c[ImGuiCol_WindowBg] = ColorFromHex(p.base);
+    c[ImGuiCol_ChildBg] = ColorFromHex(p.base);
+    c[ImGuiCol_PopupBg] = ColorFromHex(p.mantle);
+    c[ImGuiCol_Border] = ColorFromHex(p.surface1);
+    c[ImGuiCol_BorderShadow] = ImVec4(0, 0, 0, 0);
+    c[ImGuiCol_FrameBg] = ColorFromHex(p.surface0);
+    c[ImGuiCol_FrameBgHovered] = ColorFromHex(p.surface1);
+    c[ImGuiCol_FrameBgActive] = ColorFromHex(p.surface2);
+    c[ImGuiCol_TitleBg] = ColorFromHex(p.crust);
+    c[ImGuiCol_TitleBgActive] = ColorFromHex(p.mantle);
+    c[ImGuiCol_TitleBgCollapsed] = ColorFromHex(p.crust);
+    c[ImGuiCol_MenuBarBg] = ColorFromHex(p.mantle);
+    c[ImGuiCol_ScrollbarBg] = ColorFromHex(p.crust);
+    c[ImGuiCol_ScrollbarGrab] = ColorFromHex(p.surface2);
+    c[ImGuiCol_ScrollbarGrabHovered] = ColorFromHex(p.overlay0);
+    c[ImGuiCol_ScrollbarGrabActive] = ColorFromHex(p.overlay1);
+    c[ImGuiCol_CheckMark] = ColorFromHex(p.green);
+    c[ImGuiCol_SliderGrab] = ColorFromHex(p.blue);
+    c[ImGuiCol_SliderGrabActive] = ColorFromHex(p.mauve);
+    c[ImGuiCol_Button] = ColorFromHex(p.surface2);
+    c[ImGuiCol_ButtonHovered] = ColorFromHex(p.overlay0);
+    c[ImGuiCol_ButtonActive] = ColorFromHex(p.blue);
+    c[ImGuiCol_Header] = ColorFromHex(p.surface2);
+    c[ImGuiCol_HeaderHovered] = ColorFromHex(p.overlay0);
+    c[ImGuiCol_HeaderActive] = ColorFromHex(p.blue);
+    c[ImGuiCol_Separator] = ColorFromHex(p.surface1);
+    c[ImGuiCol_SeparatorHovered] = ColorFromHex(p.blue);
+    c[ImGuiCol_SeparatorActive] = ColorFromHex(p.mauve);
+    c[ImGuiCol_ResizeGrip] = ColorFromHex(p.surface2);
+    c[ImGuiCol_ResizeGripHovered] = ColorFromHex(p.overlay0);
+    c[ImGuiCol_ResizeGripActive] = ColorFromHex(p.blue);
+    c[ImGuiCol_Tab] = ColorFromHex(p.mantle);
+    c[ImGuiCol_TabHovered] = ColorFromHex(p.overlay0);
+    c[ImGuiCol_TabActive] = ColorFromHex(p.surface2);
+    c[ImGuiCol_TabUnfocused] = ColorFromHex(p.base);
+    c[ImGuiCol_TabUnfocusedActive] = ColorFromHex(p.mantle);
+    c[ImGuiCol_PlotLines] = ColorFromHex(p.blue);
+    c[ImGuiCol_PlotLinesHovered] = ColorFromHex(p.teal);
+    c[ImGuiCol_PlotHistogram] = ColorFromHex(p.peach);
+    c[ImGuiCol_PlotHistogramHovered] = ColorFromHex(p.yellow);
+    c[ImGuiCol_TextSelectedBg] = ColorFromHex(p.blue, 0.35f);
+}
+
 static void ApplyTheme(ThemeId id)
 {
     switch (id) {
@@ -291,13 +491,54 @@ static void ApplyTheme(ThemeId id)
         ImGui::StyleColorsLight();
         break;
     case ThemeId::Amber:
-        ApplyAccentTheme(ColorFromHex(0xd79921), ColorFromHex(0xfabd2f), ColorFromHex(0xb57614));
+        ApplyHuePalette({0x1c1410, 0x2b2018, 0x3d2e1f, 0x4f3c28, 0x5c4630, 0xf0dfc0, 0x8a7355, 0x8a5a20, 0xd68910,
+                         0xf5a623, 0xffb84d});
         break;
     case ThemeId::Green:
-        ApplyAccentTheme(ColorFromHex(0x98971a), ColorFromHex(0xb8bb26), ColorFromHex(0x79740e));
+        ApplyHuePalette({0x10180f, 0x1d2b1a, 0x2a3f25, 0x375330, 0x39512f, 0xdcecd7, 0x7a9678, 0x4f7a41, 0x5a9a3d,
+                         0x7cc954, 0x9de571});
         break;
     case ThemeId::Gruvbox:
         ApplyGruvboxTheme();
+        break;
+    case ThemeId::Blue:
+        ApplyHuePalette({0x0d1a26, 0x14283a, 0x1c3a52, 0x254d6b, 0x2c5a80, 0xd7ecf5, 0x6f93a8, 0x2c6f99, 0x3a8fc7,
+                         0x5bb3ea, 0x8ed0f7});
+        break;
+    case ThemeId::Purple:
+        ApplyHuePalette({0x160f1f, 0x241a33, 0x352548, 0x47325e, 0x543a6e, 0xe8dcf5, 0x8c7aa3, 0x6b3f96, 0x8b4fc2,
+                         0xab6fe0, 0xc99bf0});
+        break;
+    case ThemeId::Red:
+        ApplyHuePalette({0x1f0f0f, 0x331a1a, 0x4a2323, 0x612e2e, 0x703636, 0xf5dcdc, 0xa37a7a, 0x963232, 0xc23e3e,
+                         0xe0605f, 0xf28f8e});
+        break;
+    case ThemeId::Teal:
+        ApplyHuePalette({0x0a1f1c, 0x123330, 0x1a4a44, 0x226158, 0x287168, 0xd6f5ef, 0x74a89e, 0x1f8577, 0x2aab97,
+                         0x4ecdb6, 0x86e3d0});
+        break;
+    case ThemeId::Pink:
+        ApplyHuePalette({0x1f0f18, 0x331a29, 0x4a2339, 0x612e49, 0x703656, 0xf5dcec, 0xa37a94, 0x96326d, 0xc23e8c,
+                         0xe0609f, 0xf28fc0});
+        break;
+    case ThemeId::Nord:
+        ApplyNordTheme();
+        break;
+    case ThemeId::CatppuccinLatte:
+        ApplyCatppuccinPalette({0xeff1f5, 0xe6e9ef, 0xdce0e8, 0xccd0da, 0xbcc0cc, 0xacb0be, 0x9ca0b0, 0x8c8fa1,
+                                0x4c4f69, 0x1e66f5, 0x8839ef, 0x40a02b, 0xfe640b, 0xdf8e1d, 0x179299});
+        break;
+    case ThemeId::CatppuccinFrappe:
+        ApplyCatppuccinPalette({0x303446, 0x292c3c, 0x232634, 0x414559, 0x51576d, 0x626880, 0x737994, 0x838ba7,
+                                0xc6d0f5, 0x8caaee, 0xca9ee6, 0xa6d189, 0xef9f76, 0xe5c890, 0x81c8be});
+        break;
+    case ThemeId::CatppuccinMacchiato:
+        ApplyCatppuccinPalette({0x24273a, 0x1e2030, 0x181926, 0x363a4f, 0x494d64, 0x5b6078, 0x6e738d, 0x8087a2,
+                                0xcad3f5, 0x8aadf4, 0xc6a0f6, 0xa6da95, 0xf5a97f, 0xeed49f, 0x8bd5ca});
+        break;
+    case ThemeId::CatppuccinMocha:
+        ApplyCatppuccinPalette({0x1e1e2e, 0x181825, 0x11111b, 0x313244, 0x45475a, 0x585b70, 0x6c7086, 0x7f849c,
+                                0xcdd6f4, 0x89b4fa, 0xcba6f7, 0xa6e3a1, 0xfab387, 0xf9e2af, 0x94e2d5});
         break;
     case ThemeId::Dark:
     default:
@@ -341,6 +582,19 @@ int main(int, char**)
     if (!window || !renderer) {
         std::fprintf(stderr, "Window/renderer creation failed: %s\n", SDL_GetError());
         return 1;
+    }
+
+    {
+        int iw, ih, ic;
+        unsigned char* px = stbi_load_from_memory(kIconPng, int(sizeof kIconPng), &iw, &ih, &ic, 4);
+        if (px) {
+            SDL_Surface* icon = SDL_CreateRGBSurfaceWithFormatFrom(px, iw, ih, 32, iw * 4, SDL_PIXELFORMAT_RGBA32);
+            if (icon) {
+                SDL_SetWindowIcon(window, icon);
+                SDL_FreeSurface(icon);
+            }
+            stbi_image_free(px);
+        }
     }
 
     IMGUI_CHECKVERSION();
@@ -445,6 +699,7 @@ int main(int, char**)
         if (v == inGameMode)
             return;
         inGameMode = v;
+        SDL_SetWindowTitle(window, v ? "WT Rangefinder - F1 to exit" : "WT Rangefinder");
         if (v) {
             SDL_GetWindowSize(window, &savedNormalW, &savedNormalH);
             SDL_GetWindowPosition(window, &savedNormalX, &savedNormalY);
@@ -696,16 +951,8 @@ int main(int, char**)
 
         // --- Side panel ---
         if (inGameMode) {
-            // Just the map, plus a small unobtrusive way back to the full
-            // panel (F1 also toggles this, but the button is discoverable).
-            ImGui::SetNextWindowPos(ImVec2(8, 8));
-            ImGui::SetNextWindowBgAlpha(0.35f);
-            ImGui::Begin("##ingameoverlay", nullptr,
-                         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                             ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize);
-            if (ImGui::Button("Exit in-game mode (F1)"))
-                setInGameMode(false);
-            ImGui::End();
+            // Just the map; the way back (F1) is shown in the window title
+            // so nothing covers the minimap itself.
             ImGui::Render();
             SDL_SetRenderDrawColor(renderer, 18, 18, 20, 255);
             SDL_RenderClear(renderer);
@@ -724,11 +971,14 @@ int main(int, char**)
         ImGui::SetNextItemWidth(-1);
         int themeIdx = (int)theme;
         if (ImGui::BeginCombo("##theme", kThemeNames[themeIdx])) {
-            for (int i = 0; i < (int)ThemeId::Count; ++i)
-                if (ImGui::Selectable(kThemeNames[i], i == themeIdx)) {
-                    theme = (ThemeId)i;
-                    ApplyTheme(theme);
-                }
+            for (const ThemeGroup& group : kThemeGroups) {
+                ImGui::SeparatorText(group.title);
+                for (ThemeId t : group.themes)
+                    if (ImGui::Selectable(kThemeNames[(int)t], (int)t == themeIdx)) {
+                        theme = t;
+                        ApplyTheme(theme);
+                    }
+            }
             ImGui::EndCombo();
         }
         ImGui::Separator();
@@ -849,6 +1099,22 @@ int main(int, char**)
             ImGui::TextWrapped("%s", loadErr.c_str());
             ImGui::PopStyleColor();
         }
+
+        // Credits + license footer, pinned to the bottom of the panel
+        const float footerH = ImGui::GetTextLineHeightWithSpacing() * 3 + ImGui::GetStyle().ItemSpacing.y * 2;
+        const float footerY = ImGui::GetWindowHeight() - footerH - ImGui::GetStyle().WindowPadding.y;
+        if (ImGui::GetCursorPosY() < footerY)
+            ImGui::SetCursorPosY(footerY);
+        ImGui::Separator();
+        ImGui::TextDisabled("Made by");
+        ImGui::SameLine(0, 4);
+        LinkText(kAuthorName, kAuthorUrl);
+        ImGui::TextDisabled("Free software under the AGPLv3");
+        LinkText("License", kLicenseUrl);
+        ImGui::SameLine();
+        ImGui::TextDisabled("|");
+        ImGui::SameLine();
+        LinkText("Source code", kSourceUrl);
         ImGui::End();
 
         // --- Render ---
